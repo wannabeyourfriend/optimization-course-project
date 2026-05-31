@@ -1,0 +1,146 @@
+\begin{theorem}[Integrated prefix-sum noise of DP-CorrMom at matched privacy]
+\label{thm:t6-prefix-noise}
+Fix a single coordinate and a horizon $T\ge 1$. Let $z_0:=0$ and let $z_1,\dots,z_T\overset{\mathrm{iid}}{\sim}\mathcal N(0,1)$ be the base privacy noises drawn by \texttt{\_generate\_noise}. For a correlation parameter $\lambda\in[0,1)$ and a per-step base scale $\nu>0$, DP-CorrMom injects the \emph{anti-correlated} noise
+\[
+w_t \;:=\; \nu\,\bigl(z_t-\lambda\,z_{t-1}\bigr),\qquad t=1,\dots,T,
+\]
+into the (per-coordinate) clipped gradient, exactly as in \texttt{\_inject\_correlated\_noise}. The optimizer accumulates these noises along the gradient \emph{prefix sum} (the first-moment / momentum path); after $T$ steps the integrated injected noise on that path is
+\[
+S_T \;:=\; \sum_{t=1}^{T} w_t .
+\]
+
+\medskip
+\noindent\textbf{(a) Exact variance.} For every $T\ge1$,
+\[
+\operatorname{Var}(S_T)\;=\;\nu^2\,\Bigl[\,1+(1-\lambda)^2\,(T-1)\,\Bigr].
+\]
+
+\medskip
+\noindent\textbf{(b) Matched privacy.} To attain the same R\'enyi/zCDP guarantee as i.i.d.\ DP-SGD with noise multiplier $\sigma$ and clip norm $C$, the base scale must be inflated by the matrix-mechanism column sensitivity
+\[
+\kappa_T \;:=\; \mathtt{corr\_sensitivity}(\lambda,T)\;=\;\sqrt{\frac{1-\lambda^{2T}}{1-\lambda^{2}}}\;\le\;\kappa_\infty:=\frac{1}{\sqrt{1-\lambda^2}},
+\qquad \nu=\sigma\,C\,\kappa_T\ (\le \sigma C\kappa_\infty).
+\]
+Using the (conservative, $T$-independent) matched scale $\nu=\sigma C\,\kappa_\infty$, i.e.\ $\nu^2=\sigma^2C^2/(1-\lambda^2)$, the integrated prefix-sum noise variance is exactly
+\[
+\boxed{\ \operatorname{Var}(S_T)
+\;=\;\sigma^2 C^2\!\left[\frac{1}{1-\lambda^2}+\frac{1-\lambda}{1+\lambda}\,(T-1)\right].\ }
+\]
+With the exact finite-$T$ scale $\nu=\sigma C\,\kappa_T$ the same expression holds with the bracket multiplied by $\kappa_T^2/\kappa_\infty^2=1-\lambda^{2T}\le1$, hence the boxed expression is an upper bound that is tight as $T\to\infty$.
+
+\medskip
+\noindent\textbf{(c) Asymptotic ratio.} For i.i.d.\ DP-SGD ($\lambda=0$, $\kappa\equiv1$, $\nu=\sigma C$) the same quantity is $\operatorname{Var}^{\mathrm{iid}}(S_T)=\sigma^2C^2\,T$. Therefore, at matched privacy,
+\[
+\lim_{T\to\infty}\frac{\operatorname{Var}(S_T)}{\operatorname{Var}^{\mathrm{iid}}(S_T)}
+\;=\;\frac{1-\lambda}{1+\lambda}\;<\;1\qquad\text{for all }\lambda\in(0,1),
+\]
+and the ratio is strictly decreasing in $\lambda$ on $[0,1)$. Hence correlated noise provably lowers the integrated noise that the optimizer accumulates on the prefix sum.
+\end{theorem}
+
+\begin{proof}
+We work coordinatewise; every coordinate is statistically identical, so it suffices to prove the one-dimensional statement, and the per-coordinate variances add to give the $d$-dimensional result up to the global factor $d$ (which cancels in the ratio of part (c)). All expectations are over the privacy noise $z_1,\dots,z_T$ only; the clipped gradient is conditioned upon and, being independent of $z$, contributes nothing to the variance of the \emph{injected} noise $S_T$.
+
+\par\smallskip\noindent\textbf{Symbols and standing assumptions.}\quad 
+\begin{itemize}
+\item $T\in\mathbb N$ is the number of optimizer steps; $\lambda\in[0,1)$ is the scalar correlation parameter (\texttt{lambda\_corr}); $\sigma>0$ is the i.i.d.\ DP-SGD noise multiplier; $C>0$ is the per-sample $\ell_2$ clip norm (\texttt{max\_grad\_norm}); $\nu>0$ is the per-step \emph{base} noise scale actually passed to \texttt{\_generate\_noise} (its \texttt{std} argument is $\texttt{noise\_multiplier}\cdot\texttt{max\_grad\_norm}$, so $\nu$ already absorbs $C$).
+\item (A1) \emph{Convention.} $z_0:=0$. This matches the implementation: at $t=1$ the buffer \texttt{\_prev\_noise} is empty, so $w_1=\nu z_1$ (no subtraction), i.e.\ the first injection is uncorrelated. This boundary term is responsible for the additive $\nu^2$ (equivalently the $\frac{1}{1-\lambda^2}$) in the variance.
+\item (A2) \emph{Whiteness.} $z_1,\dots,z_T$ are i.i.d.\ $\mathcal N(0,1)$, hence $\mathbb E[z_t]=0$, $\operatorname{Var}(z_t)=1$, and $\operatorname{Cov}(z_s,z_t)=\delta_{st}$ for $s,t\ge1$. This is the Gaussian mechanism's per-call draw.
+\item (A3) \emph{Prefix-sum accumulation.} The optimizer integrates each step's gradient (plus injected noise) into a running prefix sum; the noise component of that prefix sum after $T$ steps is $S_T=\sum_{t=1}^T w_t$. This is exact for plain SGD/momentum-$0$ (where the parameter trajectory is literally $\theta_T=\theta_0-\eta\sum_t(g_t+w_t)$, see \texttt{DPCorrelatedOptimizer}) and is the relevant accumulation operator for the first-moment path in general; we analyse this prefix-sum (workload matrix $A=$ lower-triangular all-ones).
+\end{itemize}
+
+\par\smallskip\noindent\textbf{Step 1: Telescoping of the injected noise.}\quad 
+By definition of $w_t$ and linearity of summation,
+\[
+S_T=\sum_{t=1}^{T} w_t
+=\nu\sum_{t=1}^{T}\bigl(z_t-\lambda z_{t-1}\bigr)
+=\nu\left(\sum_{t=1}^{T} z_t-\lambda\sum_{t=1}^{T} z_{t-1}\right).
+\]
+Re-index the second sum by $s=t-1$, so it runs over $s=0,\dots,T-1$:
+\[
+S_T=\nu\left(\sum_{t=1}^{T} z_t-\lambda\sum_{s=0}^{T-1} z_s\right).
+\]
+Split off the non-overlapping endpoints. The first sum contains $z_T$ and $z_1,\dots,z_{T-1}$; the second contains $z_0$ and $z_1,\dots,z_{T-1}$. Hence
+\[
+S_T=\nu\Bigl(z_T-\lambda z_0+(1-\lambda)\sum_{t=1}^{T-1} z_t\Bigr)
+\overset{(A1)}{=}\nu\Bigl(z_T+(1-\lambda)\sum_{t=1}^{T-1} z_t\Bigr),
+\tag{1}
+\]
+using $z_0=0$. This is the key cancellation: the anti-correlated injections collapse the running sum onto a \emph{single} fresh draw $z_T$ plus a $(1-\lambda)$-attenuated sum of the interior draws. (Equivalently, in matrix form $S_T=\nu\,\mathbf 1^\top L z$ with $L$ the lower-bidiagonal matrix $[1,-\lambda]$; $\mathbf 1^\top L=[\,(1-\lambda),\dots,(1-\lambda),1\,]$, reproducing (1).)
+
+\par\smallskip\noindent\textbf{Step 2: Exact variance (part (a)).}\quad 
+The representation (1) is a linear combination of the \emph{independent} variables $z_1,\dots,z_T$ with coefficients
+\[
+c_T=\nu \quad(\text{coefficient of }z_T),\qquad c_t=\nu(1-\lambda)\ \ (t=1,\dots,T-1).
+\]
+By (A2) the $z_t$ are uncorrelated with unit variance, so $\operatorname{Var}(S_T)=\sum_{t=1}^{T}c_t^2$:
+\[
+\operatorname{Var}(S_T)
+=\nu^2+\sum_{t=1}^{T-1}\nu^2(1-\lambda)^2
+=\nu^2\Bigl[\,1+(1-\lambda)^2(T-1)\,\Bigr].
+\tag{2}
+\]
+This proves (a) and is exact for every $T\ge1$ and every $\nu$. (Sanity: $\lambda=0$ gives $\nu^2 T$, the i.i.d.\ random walk; $T=1$ gives $\nu^2$, a single draw.)
+
+\par\smallskip\noindent\textbf{Step 3: The matched-privacy scale (part (b)).}\quad 
+We justify $\kappa_T$ from the matrix-mechanism / DP-FTRL sensitivity and import it into (2).
+
+The injection map is $w=\nu L z$ with
+\[
+L=\begin{pmatrix}1&&&\\ -\lambda&1&&\\ &\ddots&\ddots&\\ &&-\lambda&1\end{pmatrix}\in\mathbb R^{T\times T},
+\]
+lower-bidiagonal with $1$ on the diagonal and $-\lambda$ on the sub-diagonal. The released prefix sums are $\hat A=A(g+w)=Ag+\nu AL z$, where $A$ is the lower-triangular all-ones (prefix-sum) workload. Writing $A=C_{\mathrm{strat}}L$ with $C_{\mathrm{strat}}:=AL^{-1}$, the factorization mechanism releases $Ag$ by adding noise $\nu A L z=\nu C_{\mathrm{strat}}\,(Lz)$ on the strategy $C_{\mathrm{strat}}$; equivalently the noise actually \emph{added per stream} is $\nu L z$, the strategy whose privacy cost is set by $L^{-1}$. Concretely, $L^{-1}$ is the lower-triangular Toeplitz matrix with entries $(L^{-1})_{ij}=\lambda^{\,i-j}$ for $i\ge j$ (and $0$ otherwise), i.e.\ each column is $[1,\lambda,\lambda^2,\dots]^\top$ (verified explicitly: e.g.\ at $\lambda=0.5,T=4$ the first column is $[1,0.5,0.25,0.125]^\top$, of $\ell_2$-norm $1.1524=\sqrt{\sum_{k=0}^3\lambda^{2k}}$). The privacy sensitivity of a matrix mechanism that realises the prefix-sum workload by adding i.i.d.\ unit noise scaled by $L^{-1}$'s columns is the maximum column $\ell_2$-norm of $L^{-1}$:
+\[
+\kappa_T=\max_{1\le j\le T}\bigl\|(L^{-1})_{\cdot,j}\bigr\|_2
+=\Bigl(\sum_{k=0}^{T-1}\lambda^{2k}\Bigr)^{1/2}
+=\sqrt{\frac{1-\lambda^{2T}}{1-\lambda^{2}}},
+\tag{3}
+\]
+the maximum being attained at the first column $j=1$, which contains all $T$ powers $\lambda^0,\dots,\lambda^{T-1}$ (later columns are truncations $[1,\lambda,\dots,\lambda^{T-j}]^\top$ and hence have strictly smaller norm). The middle equality is the finite geometric series $\sum_{k=0}^{T-1}\lambda^{2k}=(1-\lambda^{2T})/(1-\lambda^2)$, valid since $\lambda^2\ne1$. This is exactly \texttt{corr\_sensitivity(lam, steps)}, and a direct numerical check confirms (3) coincides with the max-column-norm of the materialized $L^{-1}$ over $\lambda\in\{0,0.3,0.5,0.9,0.95\}$, $T\in\{5,50,500\}$ to machine precision. A single-coordinate-change Mahalanobis check confirms it: the released vector is $\hat A\sim\mathcal N(Ag,\nu^2 LL^\top)$ up to the fixed map $A$, and changing one input record by $G e_t$ shifts the mean by $G A e_t$, with squared Mahalanobis norm $\propto (G^2/\nu^2)\,(L L^\top)^{-1}_{tt}=(G^2/\nu^2)\,\|(L^{-1})_{\cdot,t}\|_2^2$, whose worst case over $t$ is $G^2\kappa_T^2/\nu^2$; matching this to the i.i.d.\ value $G^2/(\sigma C)^2$ gives $\nu=\sigma C\kappa_T$. The naive $\sqrt{1+\lambda^2}$ is the column norm of $L$ rather than $L^{-1}$: it \emph{under}-noises and breaks privacy (e.g.\ at $\lambda=0.9$, $\sqrt{1+\lambda^2}=1.345$ vs the correct $\kappa_\infty=1/\sqrt{1-\lambda^2}=2.294$); $\kappa_T$ in (3) is the correct one, consistent with the synthesis's accounting correction.
+
+Since $0\le\lambda<1$ we have $0\le\lambda^{2T}<1$, and for $\lambda\in(0,1)$ strictly $0<\lambda^{2T}<1$; hence $\kappa_T$ is non-decreasing in $T$ (strictly increasing for $\lambda>0$) and
+\[
+\kappa_T^2=\frac{1-\lambda^{2T}}{1-\lambda^2}\ \uparrow\ \kappa_\infty^2=\frac{1}{1-\lambda^2}\quad(T\to\infty),
+\qquad \kappa_T^2=\kappa_\infty^2\,(1-\lambda^{2T}).
+\tag{4}
+\]
+The implementation inflates the per-step std to $\nu=\sigma C\kappa_T$ (equivalently passes a \texttt{noise\_multiplier} already multiplied by $\kappa_T$) and uses an unamplified accountant, so that the released prefix sums carry exactly the i.i.d.\ DP-SGD$(\sigma,C)$ guarantee. Substituting the conservative $T$-independent scale $\nu^2=\sigma^2C^2\kappa_\infty^2=\sigma^2C^2/(1-\lambda^2)$ into the exact variance (2):
+\[
+\operatorname{Var}(S_T)
+=\frac{\sigma^2C^2}{1-\lambda^2}\Bigl[\,1+(1-\lambda)^2(T-1)\,\Bigr]
+=\sigma^2C^2\left[\frac{1}{1-\lambda^2}+\frac{(1-\lambda)^2}{1-\lambda^2}\,(T-1)\right].
+\]
+Now use the algebraic identity $\dfrac{(1-\lambda)^2}{1-\lambda^2}=\dfrac{(1-\lambda)^2}{(1-\lambda)(1+\lambda)}=\dfrac{1-\lambda}{1+\lambda}$ (legitimate since $1-\lambda\ne0$ for $\lambda<1$). This yields precisely
+\[
+\operatorname{Var}(S_T)=\sigma^2C^2\left[\frac{1}{1-\lambda^2}+\frac{1-\lambda}{1+\lambda}\,(T-1)\right],
+\tag{5}
+\]
+the boxed claim of part (b). If instead the exact finite-$T$ scale $\nu^2=\sigma^2C^2\kappa_T^2$ is used, then by (4) the right-hand side of (5) is multiplied by $\kappa_T^2/\kappa_\infty^2=1-\lambda^{2T}\in(0,1]$, so (5) is an exact upper bound that becomes tight as $T\to\infty$; this is consistent with the conservative-$\kappa$ practice and confirmed numerically (e.g.\ $\lambda=0.9$, $T=5$: the conservative (5) gives $5.474$ while the exact finite-$T$ value is $3.565=(1-\lambda^{10})\cdot 5.474$, and the two coincide to all displayed digits once $T\gtrsim 50$, since then $1-\lambda^{2T}\approx1$).
+
+\par\smallskip\noindent\textbf{Step 4: The i.i.d.\ baseline and the asymptotic ratio (part (c)).}\quad 
+For i.i.d.\ DP-SGD set $\lambda=0$, so $w_t=\nu z_t$ with $\kappa_0\equiv1$ and the matched scale is $\nu=\sigma C$. Then $S_T^{\mathrm{iid}}=\sigma C\sum_{t=1}^T z_t$, a random walk of independent unit-variance steps, hence
+\[
+\operatorname{Var}^{\mathrm{iid}}(S_T)=\sigma^2C^2\,T
+\tag{6}
+\]
+(also recovered by setting $\lambda=0$ in (2)). Taking the ratio of (5) to (6),
+\[
+\frac{\operatorname{Var}(S_T)}{\operatorname{Var}^{\mathrm{iid}}(S_T)}
+=\frac{1}{T}\left[\frac{1}{1-\lambda^2}+\frac{1-\lambda}{1+\lambda}\,(T-1)\right]
+=\frac{1-\lambda}{1+\lambda}+\frac{1}{T}\left[\frac{1}{1-\lambda^2}-\frac{1-\lambda}{1+\lambda}\right].
+\tag{7}
+\]
+The bracketed $O(1/T)$ correction is a fixed finite constant (independent of $T$); indeed
+$\frac{1}{1-\lambda^2}-\frac{1-\lambda}{1+\lambda}=\frac{1-(1-\lambda)^2}{1-\lambda^2}=\frac{2\lambda-\lambda^2}{1-\lambda^2}>0$ for $\lambda\in(0,1)$. Letting $T\to\infty$,
+\[
+\lim_{T\to\infty}\frac{\operatorname{Var}(S_T)}{\operatorname{Var}^{\mathrm{iid}}(S_T)}=\frac{1-\lambda}{1+\lambda}.
+\tag{8}
+\]
+Define $r(\lambda):=\frac{1-\lambda}{1+\lambda}$ on $[0,1)$. Then $r(0)=1$ and
+\[
+r'(\lambda)=\frac{-(1+\lambda)-(1-\lambda)}{(1+\lambda)^2}=\frac{-2}{(1+\lambda)^2}<0,
+\]
+so $r$ is strictly decreasing; hence $r(\lambda)<r(0)=1$ for every $\lambda\in(0,1)$, and $r(\lambda)\downarrow0$ as $\lambda\uparrow1$. Therefore the asymptotic integrated prefix-sum noise variance under DP-CorrMom is strictly smaller than under i.i.d.\ DP-SGD at matched privacy, by the factor $\frac{1-\lambda}{1+\lambda}<1$, and this factor shrinks monotonically with $\lambda$ (e.g.\ $r(0.9)=0.0526$, $r(0.95)=0.0256$). Moreover, since the $O(1/T)$ term in (7) is strictly positive for $\lambda\in(0,1)$, the finite-$T$ ratio under the conservative scale approaches the limit \emph{from above} (so the limit is a genuine lower envelope of the finite-$T$ reductions, never an over-claim); under the exact finite-$T$ scale $\kappa_T$ the ratio is even smaller (multiplied by $1-\lambda^{2T}<1$). This completes the proof of (a), (b), (c). \qed
+
+\par\smallskip\noindent\textbf{Remark (interpretation, and why this does not contradict the empirical negative).}\quad 
+Part (c) is a \emph{provable variance reduction} on the first-moment/prefix-sum path: the very quantity the optimizer accumulates is denoised by $\tfrac{1-\lambda}{1+\lambda}$ at the same $(\varepsilon,\delta)$. This is the theoretical promise of correlated noise / DP matrix factorization (DP-FTRL), and it is genuine. It does \emph{not}, however, imply a utility gain in our regime, for a reason the report makes precise: at noise share $\rho=\Phi/\hat v\approx1$ the per-coordinate true second moment $v_{\mathrm{true}}\approx0$, i.e.\ the recoverable signal already sits below the DP-noise floor after the $\sqrt T$ averaging that plain momentum/prefix-sum supplies. The model is then \emph{signal-limited, not variance-limited}: lowering the integrated noise variance further (the content of (8)) acts on a constraint that is no longer binding. This is consistent with, and explains, the empirical finding that $\lambda>0$ does not beat a tuned, amplified DP-Adam across the Adam-momentum, $\beta_1{=}0$, and matched plain-SGD workloads (the single-scalar DP-CorrMom/DP-CorrSGD sweeps). The theorem is therefore a correct and tight statement about \emph{noise on the prefix sum}; the signal-ceiling mechanism is what separates ``less prefix-sum noise'' from ``better utility'' in LLM DP-LoRA fine-tuning.
+\end{proof}

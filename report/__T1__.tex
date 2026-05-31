@@ -1,0 +1,241 @@
+\begin{theorem}[Second-moment inflation by the DP noise variance $\Phi$]
+\label{thm:vhat-bias}
+Consider DP-Adam fine-tuning with the per-step privatized gradient produced by an Opacus
+\texttt{DPOptimizer} (per-sample $\ell_2$ clipping at threshold $C$, Gaussian noise with
+multiplier $\sigma$, mean reduction over the effective batch $B_{\mathrm{eff}}$), fed into
+Adam's exponential-moving-average (EMA) second-moment estimator with bias correction.
+Fix one coordinate $j\in\{1,\dots,d\}$ and let $\hat v_t$ denote the bias-corrected
+second moment at step $t$ for that coordinate. Define the per-coordinate DP-noise variance
+\[
+\Phi \;:=\; \Big(\frac{\sigma\,C}{B_{\mathrm{eff}}}\Big)^{2},
+\qquad
+B_{\mathrm{eff}} \;:=\; (\text{expected batch size})\times(\text{accumulated iterations}).
+\]
+Then, under Assumptions \textnormal{(A1)--(A4)} below,
+\[
+\boxed{\;\mathbb{E}[\hat v_t] \;=\; v^{\mathrm{true}}_t \;+\; \Phi\;}
+\qquad\text{for every }t\ge 1,
+\]
+where $v^{\mathrm{true}}_t := \dfrac{(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\,\mathbb{E}[\bar g_{t-k}^2]}{1-\beta_2^{\,t}}$
+is the bias-corrected EMA of the squared \emph{clipped-mean} gradient (the noise-free target).
+That is, the DP Gaussian noise inflates Adam's per-coordinate second-moment estimate by
+\emph{exactly} the injected per-coordinate noise variance $\Phi$, independently of the step
+index $t$, of the EMA decay $\beta_2$, and of the gradient signal. Consequently the DP-AdamBC
+correction $\hat v_t^{\mathrm{BC}}=\hat v_t-\Phi$ is, in expectation, an exact debiasing of the
+second moment, and $\Phi$ equals the closed form computed in
+\texttt{dp\_adaptive.DPAdaptive.phi}.
+\end{theorem}
+
+\begin{proof}
+We make explicit the modelling assumptions, identify the exact per-coordinate noise variance
+$\Phi$ baked into the gradient that reaches the optimizer, and then propagate it through the
+bias-corrected EMA recursion. Throughout, all quantities are for a single fixed coordinate
+$j$; we suppress $j$ to lighten notation. Expectations are taken over the DP Gaussian noise
+(and, where stated, over the Poisson minibatch sampling), conditioning the clipped signal as
+described.
+
+\medskip
+\noindent\textbf{Assumptions.}
+\begin{description}
+  \item[(A1) Opacus clip-and-noise pipeline.] At step $t$ the optimizer receives, in
+  \texttt{p.grad}, the gradient produced by \texttt{DPOptimizer.pre\_step()}, namely
+  \[
+    g_t \;=\; \frac{1}{B_{\mathrm{eff}}}\Big(\underbrace{\textstyle\sum_{i\in\mathcal B_t}\mathrm{clip}_C\!\big(\nabla\ell_i\big)}_{=: S_t}\;+\;z_t\Big),
+    \qquad
+    z_t \sim \mathcal N\!\big(0,\,(\sigma C)^2 I_d\big),
+  \]
+  where $\mathrm{clip}_C(v)=v\cdot\min\{1,\,C/\|v\|_2\}$ is the per-sample $\ell_2$ clip,
+  $\sigma$ is the noise multiplier (\texttt{noise\_multiplier}), $C$ is the clipping norm
+  (\texttt{max\_grad\_norm}), and $B_{\mathrm{eff}}=$ \texttt{expected\_batch\_size} $\times$ \texttt{accumulated\_iterations}
+  is the mean-reduction denominator (\texttt{loss\_reduction="mean"}). This is exactly the
+  Opacus mechanism: \texttt{clip\_and\_accumulate} forms $S_t$, \texttt{add\_noise} adds
+  $z_t$, and \texttt{scale\_grad} divides by $B_{\mathrm{eff}}$. The Gaussian standard
+  deviation $\sigma C$ is the gradient $\ell_2$-sensitivity $C$ times the multiplier $\sigma$,
+  which is what calibrates the $(\varepsilon,\delta)$ guarantee. Crucially, the noise $z_t$ is
+  injected onto the \emph{sum} $S_t$ and then the whole quantity is divided by $B_{\mathrm{eff}}$,
+  so the noise inherits the $1/B_{\mathrm{eff}}$ factor (not $1/B_{\mathrm{eff}}^{1/2}$); this is
+  what makes $\Phi$ scale as $1/B_{\mathrm{eff}}^2$.
+
+  \item[(A2) Noise model.] The DP noise $z_t$ is drawn from an isotropic Gaussian with
+  independent coordinates, and is independent of the data and of the clipped sum $S_t$ (it is
+  freshly sampled inside \texttt{add\_noise}, after clipping). In particular, for the fixed
+  coordinate, the contribution to $g_t$ is
+  \[
+    \xi_t \;:=\; \frac{z_{t}}{B_{\mathrm{eff}}}\;\sim\;\mathcal N\!\big(0,\,\Phi\big),
+    \qquad
+    \Phi := \mathrm{Var}(\xi_t) = \frac{(\sigma C)^2}{B_{\mathrm{eff}}^2}=\Big(\frac{\sigma C}{B_{\mathrm{eff}}}\Big)^2 .
+  \]
+  Write also $\bar g_t := S_t/B_{\mathrm{eff}}$ for the (data-dependent) clipped-mean signal in
+  that coordinate, so that
+  \[
+    g_t \;=\; \bar g_t + \xi_t,
+    \qquad \xi_t\perp \bar g_t,\qquad \mathbb E[\xi_t\mid \bar g_t]=0,\qquad \mathbb E[\xi_t^2\mid \bar g_t]=\Phi.
+  \]
+  \emph{Scope note (what is and is not used).} Only two facts about $\xi_t$ enter the proof:
+  for each fixed $t$, $\xi_t$ is centered with conditional variance $\Phi$ given the
+  \emph{same-step} signal $\bar g_t$. Independence of $\xi_t$ \emph{across} distinct steps is
+  \emph{not} required for the mean identity, because (as Step~3 shows) no product
+  $\xi_{t-k}\xi_{t-k'}$ with $k\ne k'$ ever appears; only the marginal second moment of each
+  squared term is used. We retain ``independent across steps'' merely because it holds in the
+  code (fresh draws) and is needed for any \emph{variance}/concentration statement, not for the
+  expectation here.
+
+  \item[(A3) EMA second moment with bias correction.] Adam maintains, per coordinate,
+  \[
+    v_t \;=\; \beta_2\, v_{t-1} + (1-\beta_2)\, g_t^2,
+    \qquad v_0 = 0,
+    \qquad
+    \hat v_t \;=\; \frac{v_t}{1-\beta_2^{\,t}},
+  \]
+  with decay $\beta_2\in(0,1)$. This matches \texttt{v.mul\_(b2).addcmul\_(g,g,value=1-b2)}
+  followed by \texttt{vhat = v / (1 - b2**t)} in \texttt{\_adam\_update}, with the standard
+  zero initialization $v_0=0$ (\texttt{state["exp\_avg\_sq"] = torch.zeros\_like(p)}).
+
+  \item[(A4) Stationarity of the mechanism within a step.] $\sigma$, $C$ and $B_{\mathrm{eff}}$
+  are fixed for the run (equivalently, fixed at each step), so $\Phi$ is a constant across the
+  $t$ steps that enter $v_t$. (If they vary, the statement holds per step with the obvious
+  step-indexed $\Phi_k$ in place of $\Phi$ in \eqref{eq:Ev}; we take them constant, as in the
+  code where \texttt{phi} is a single scalar property.)
+\end{description}
+
+\medskip
+\noindent\textbf{Step 1: each squared gradient carries an additive bias $\Phi$ in expectation.}
+Fix any step index $s$ and condition on the clipped-mean signal $\bar g_s$. Using
+$g_s = \bar g_s + \xi_s$ and expanding the square,
+\[
+  \mathbb E\!\left[g_s^2 \,\middle|\, \bar g_s\right]
+  \;=\; \mathbb E\!\left[\bar g_s^2 + 2\,\bar g_s\,\xi_s + \xi_s^2 \,\middle|\, \bar g_s\right]
+  \;=\; \bar g_s^2 + 2\,\bar g_s\,\underbrace{\mathbb E[\xi_s\mid\bar g_s]}_{=0} + \underbrace{\mathbb E[\xi_s^2\mid\bar g_s]}_{=\Phi}
+  \;=\; \bar g_s^2 + \Phi,
+\]
+where the first two summands are pulled out because $\bar g_s$ is $\sigma(\bar g_s)$-measurable,
+the cross term vanishes because $\mathbb E[\xi_s\mid\bar g_s]=0$ (A2), and the last term equals
+$\Phi$ by the conditional-variance identity of (A2). Taking the outer expectation over
+$\bar g_s$ and using the tower property $\mathbb E[\cdot]=\mathbb E[\mathbb E[\cdot\mid\bar g_s]]$,
+\begin{equation}
+\label{eq:gsq-bias}
+  \mathbb E[g_s^2] \;=\; \mathbb E[\bar g_s^2] + \Phi
+  \qquad\text{for every }s\ge 1.
+\end{equation}
+This is a statement about the \emph{marginal} second moment of $g_s$ alone; it involves no
+other step. Thus each squared gradient that enters the EMA carries the \emph{same} additive
+bias $\Phi$ on top of the noise-free target $\mathbb E[\bar g_s^2]$. (Note $\mathbb E[\bar g_s^2]$
+itself contains the minibatch-sampling variance of $\bar g_s$; this is part of $v^{\mathrm{true}}$
+and is precisely what BC must \emph{not} remove.)
+
+\medskip
+\noindent\textbf{Step 2: solve the EMA recursion in closed form.}
+With $v_0=0$, unrolling $v_t=\beta_2 v_{t-1}+(1-\beta_2)g_t^2$ gives the standard geometric
+sum
+\begin{equation}
+\label{eq:ema-unroll}
+  v_t \;=\; (1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\, g_{t-k}^2 .
+\end{equation}
+We verify \eqref{eq:ema-unroll} by induction on $t$. Base case $t=1$:
+$v_1=\beta_2 v_0+(1-\beta_2)g_1^2=(1-\beta_2)g_1^2$, matching the sum with a single term
+$k=0$. Inductive step: assume \eqref{eq:ema-unroll} at $t$; then
+\[
+  v_{t+1}=\beta_2 v_t+(1-\beta_2)g_{t+1}^2
+  =(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k+1} g_{t-k}^2+(1-\beta_2)g_{t+1}^2
+  =(1-\beta_2)\sum_{k=0}^{t}\beta_2^{\,k} g_{(t+1)-k}^2,
+\]
+where the last equality re-indexes $k\mapsto k+1$ on the first sum (covering $k=1,\dots,t$, with
+$g_{t-(k-1)}=g_{(t+1)-k}$) and absorbs the $g_{t+1}^2$ term as the $k=0$ summand. This is
+\eqref{eq:ema-unroll} at $t+1$, completing the induction.
+
+\medskip
+\noindent\textbf{Step 3: take expectations and apply the per-term bias.}
+The unrolled $v_t$ in \eqref{eq:ema-unroll} is a \emph{linear combination of single squared
+terms} $g_{t-k}^2$; in particular it contains no cross products $g_{t-k}g_{t-k'}$ ($k\ne k'$).
+Hence, by linearity of expectation, only the marginal second moments $\mathbb E[g_{t-k}^2]$ are
+needed, and we may substitute \eqref{eq:gsq-bias} term by term with $s=t-k$:
+\[
+  \mathbb E[v_t]
+  = (1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\,\mathbb E[g_{t-k}^2]
+  = (1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\Big(\mathbb E[\bar g_{t-k}^2]+\Phi\Big).
+\]
+(No assumption about dependence between $\xi_{t-k}$ and $\xi_{t-k'}$ is invoked, by the scope
+note in A2.) Split the sum into the signal part and the bias part:
+\begin{equation}
+\label{eq:Ev}
+  \mathbb E[v_t]
+  = \underbrace{(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\,\mathbb E[\bar g_{t-k}^2]}_{=:\,v_t^{\mathrm{true},\,\mathrm{raw}}}
+  \;+\; \Phi\,(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}.
+\end{equation}
+The bias multiplier is a finite geometric series; since $\beta_2\ne 1$,
+\begin{equation}
+\label{eq:geom}
+  (1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}
+  = (1-\beta_2)\cdot\frac{1-\beta_2^{\,t}}{1-\beta_2}
+  = 1-\beta_2^{\,t}.
+\end{equation}
+Substituting \eqref{eq:geom} into \eqref{eq:Ev},
+\begin{equation}
+\label{eq:Ev2}
+  \mathbb E[v_t]
+  = v_t^{\mathrm{true},\,\mathrm{raw}} + \big(1-\beta_2^{\,t}\big)\,\Phi.
+\end{equation}
+
+\medskip
+\noindent\textbf{Step 4: apply the bias correction $1/(1-\beta_2^{\,t})$.}
+Since $0<\beta_2<1$ we have $1-\beta_2^{\,t}>0$ for all $t\ge1$, so dividing \eqref{eq:Ev2} by
+$1-\beta_2^{\,t}$ is well defined. Using $\hat v_t = v_t/(1-\beta_2^{\,t})$ (A3) and linearity,
+\[
+  \mathbb E[\hat v_t]
+  = \frac{\mathbb E[v_t]}{1-\beta_2^{\,t}}
+  = \frac{v_t^{\mathrm{true},\,\mathrm{raw}}}{1-\beta_2^{\,t}}
+    + \frac{(1-\beta_2^{\,t})\,\Phi}{1-\beta_2^{\,t}}
+  = \underbrace{\frac{v_t^{\mathrm{true},\,\mathrm{raw}}}{1-\beta_2^{\,t}}}_{=:\,v_t^{\mathrm{true}}}
+    + \Phi .
+\]
+By the definition of $v_t^{\mathrm{true},\,\mathrm{raw}}$ in \eqref{eq:Ev}, the first term is
+exactly
+\[
+  v_t^{\mathrm{true}}
+  = \frac{(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^{\,k}\,\mathbb E[\bar g_{t-k}^2]}{1-\beta_2^{\,t}},
+\]
+the bias-corrected EMA of the squared clipped-mean (noise-free) gradient, as claimed. Hence
+\[
+  \mathbb E[\hat v_t] \;=\; v_t^{\mathrm{true}} + \Phi,
+  \qquad\text{for every }t\ge 1.
+\]
+
+\medskip
+\noindent\textbf{Step 5: identification of $\Phi$ with the code and consequences.}
+The bias is the \emph{constant} $\Phi$, with no residual $t$- or $\beta_2$-dependence: the
+bias-correction factor $1/(1-\beta_2^{\,t})$ cancels exactly the factor $(1-\beta_2^{\,t})$ that
+the EMA places on $\Phi$ in \eqref{eq:Ev2}. This cancellation is the whole point of subtracting
+the \emph{constant} $\Phi$ (not $(1-\beta_2^{\,t})\Phi$) in DP-AdamBC. By (A2),
+\[
+  \Phi=\Big(\frac{\sigma C}{B_{\mathrm{eff}}}\Big)^2
+  =\Big(\frac{\texttt{noise\_multiplier}\cdot\texttt{max\_grad\_norm}}{\texttt{expected\_batch\_size}\cdot\texttt{accumulated\_iterations}}\Big)^2,
+\]
+which is line-for-line the scalar returned by \texttt{DPAdaptive.phi} (this identification is a
+consequence of A1--A2 matching the code, not an additional probabilistic hypothesis). Two
+immediate corollaries:
+\begin{enumerate}
+  \item \emph{Exact debiasing in expectation.} $\mathbb E\big[\hat v_t-\Phi\big]=v_t^{\mathrm{true}}$,
+  so the DP-AdamBC update $\hat v_t^{\mathrm{BC}}=\hat v_t-\Phi$ (before any numerical floor
+  $\xi$) removes precisely the injected-noise inflation and restores Adam's intended
+  preconditioner geometry in expectation.
+  \item \emph{Degenerate case $\sigma=0$.} If \texttt{noise\_multiplier}$=0$ then $\Phi=0$ and
+  $\mathbb E[\hat v_t]=v_t^{\mathrm{true}}$; subtracting $\Phi$ is a no-op, consistent with the
+  code comment that DP-AdamBC then reduces to stock Adam.
+\end{enumerate}
+
+\medskip
+\noindent\textbf{Remarks (scope and tightness).}
+(i) The result is an identity in expectation; it does not require unbiasedness of $\bar g_t$
+as an estimator of $\nabla F$. Per-sample clipping may bias $\bar g_t$, but that bias lives
+\emph{inside} $v_t^{\mathrm{true}}$ (through $\mathbb E[\bar g_t^2]$) and is exactly what BC
+must preserve; the theorem isolates only the additive DP-\emph{noise} inflation $\Phi$.
+(ii) The only probabilistic inputs are the same-step conditional-mean and conditional-variance
+of $\xi_t$ given $\bar g_t$ (A2); they hold because the Gaussian is drawn after, and
+independently of, clipping. The proof does \emph{not} use cross-step noise independence for the
+mean identity (it would be needed only to control the variance of $\hat v_t$).
+(iii) Distributed (DDP) training replaces $B_{\mathrm{eff}}$ by the global batch
+$\texttt{expected\_batch\_size}\cdot\texttt{accumulated\_iterations}\cdot\texttt{world\_size}$
+because \texttt{reduce\_gradients} applies an extra $1/\texttt{world\_size}$ mean reduction to
+the rank-0 noise; substituting this $B_{\mathrm{eff}}$ leaves the statement and proof verbatim,
+matching \texttt{DistributedDPAdaptive.phi}.
+\end{proof}

@@ -1,0 +1,20 @@
+# Runtime dependencies.
+#
+# torch: the default CPU wheel from PyPI is fine for the unit tests / dry-run; on
+# a CUDA box install the matching cu1xx wheel for your driver.
+# The upper bounds pin to versions with numpy-1.x-ABI / manylinux2014 wheels
+# (older glibc); newer releases may need glibc 2.28+ or numpy 2.x.
+torch==2.6.0
+opacus==1.6.0          # DP engine (clip + noise + accountant); we subclass DPOptimizer
+transformers
+datasets<3             # 3.x drops the script-based loaders we rely on
+pyarrow<15             # 15+ is built against numpy 2.x (ABI break with numpy<2)
+numpy<2                # pyarrow<15 + opacus expect the numpy 1.x C-ABI
+peft<0.14
+wandb<0.19
+scikit-learn
+scipy
+pyyaml
+opt-einsum
+
+# E2E-NLG generation metrics (only for --task e2e):  pip install sacrebleu rouge-score

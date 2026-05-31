@@ -1,0 +1,309 @@
+\begin{theorem}[First-moment denoising at the noise floor $\rho\approx1$]\label{thm:first-moment}
+Consider DP-Adam (the optimizer of \texttt{src/dp\_optim/dp\_adaptive.py}) applied to a single
+fixed coordinate during a window of fine-tuning. After Opacus' clip--noise--average step, the
+gradient fed to the Adam update is
+\begin{equation*}
+  g_t \;=\; \bar g_t + \xi_t,\qquad
+  \xi_t \overset{\text{i.i.d.}}{\sim}\mathcal N(0,\Phi),\qquad
+  \Phi \;=\; \Big(\tfrac{\sigma_{\mathrm{DP}}\,C}{B_{\mathrm{eff}}}\Big)^{2},\quad
+  B_{\mathrm{eff}}=\text{(expected batch)}\times\text{(accum.\ steps)},
+\end{equation*}
+where $\bar g_t=\tfrac1B\sum_{i\in\mathcal B}\mathrm{clip}_C(\nabla\ell_i(x_t))$ is the (conditionally
+deterministic, given $x_t$) clipped mean gradient and $\xi_t$ is the per-coordinate Gaussian DP
+noise, independent of $\bar g_t$ and across $t$. The optimizer maintains, with decay rates
+$\beta_1,\beta_2\in[0,1)$,
+\begin{equation*}
+  m_t=\beta_1 m_{t-1}+(1-\beta_1)g_t,\quad
+  v_t=\beta_2 v_{t-1}+(1-\beta_2)g_t^2,\quad
+  \hat m_t=\frac{m_t}{1-\beta_1^{\,t}},\quad
+  \hat v_t=\frac{v_t}{1-\beta_2^{\,t}},
+\end{equation*}
+$m_0=v_0=0$, and emits the update $\Delta_t=-\,\mathrm{lr}\,\hat m_t/(\sqrt{\hat v_t}+\epsilon)$.
+
+Assume the noise-floor (saturated) regime
+\begin{equation*}
+  \textbf{(A1)}\quad \rho_t:=\frac{\Phi}{\hat v_t^{\mathrm{true}}+\Phi}\approx 1
+  \;\Longleftrightarrow\; \hat v_t^{\mathrm{true}}\ll\Phi,
+  \qquad
+  \hat v_t^{\mathrm{true}}:=\frac{(1-\beta_2)\sum_{k=0}^{t-1}\beta_2^k\,\mathbb E[\bar g_{t-k}^2]}{1-\beta_2^{\,t}},
+\end{equation*}
+i.e. the squared true (clipped, batch-averaged) gradient is far below the DP-noise variance, and
+\textbf{(A2)} the drift of $\bar g_t$ is slow on the EMA timescale $(1-\beta_1)^{-1}$, so $\mathbb
+E[\bar g_t]=\mu$ may be treated as constant over a window (locally stationary first moment). Then:
+
+\begin{enumerate}
+\item[\textbf{(i)}] \emph{(Unbiasedness)} $\hat m_t$ is an unbiased estimator of the true gradient
+in the sense $\mathbb E[\hat m_t]=\dfrac{(1-\beta_1)\sum_{k=0}^{t-1}\beta_1^k\,\mathbb E[\bar g_{t-k}]}{1-\beta_1^{\,t}}$,
+which equals $\mu$ exactly under (A2); for $\beta_1=0$, $\mathbb E[\hat m_t]=\mathbb E[\bar g_t]$
+for every $t$.
+
+\item[\textbf{(ii)}] \emph{(Steady-state variance)} The DP-noise variance of $\hat m_t$ has the
+exact finite-$t$ value
+\begin{equation*}
+  \operatorname{Var}_{\xi}(\hat m_t)
+  =\frac{1-\beta_1}{1+\beta_1}\cdot\frac{1+\beta_1^{\,t}}{1-\beta_1^{\,t}}\,\Phi,
+\end{equation*}
+which \emph{decreases} monotonically from $\Phi$ (at $t=1$, no averaging) to
+\begin{equation*}
+  \boxed{\;\lim_{t\to\infty}\operatorname{Var}_{\xi}(\hat m_t)\;=\;\frac{1-\beta_1}{1+\beta_1}\,\Phi\;}
+\end{equation*}
+and is \emph{strictly less than} the per-step variance $\Phi$ for every $\beta_1\in(0,1)$ and every
+$t\ge 2$.
+
+\item[\textbf{(iii)}] \emph{(Adaptivity off)} Under (A1), $\hat v_t=\hat v_t^{\mathrm{true}}+\Phi
+\approx\Phi$ is approximately constant across coordinates and iterations (it carries no
+per-coordinate signal), so the preconditioner $1/(\sqrt{\hat v_t}+\epsilon)$ degenerates to the
+scalar $1/(\sqrt\Phi+\epsilon)$.
+
+\item[\textbf{(iv)}] \emph{(Collapse to momentum-SGD; signal lives in $\hat m_t$)} Consequently the
+DP-Adam update obeys
+\begin{equation*}
+  \Delta_t=-\,\mathrm{lr}\,\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}
+  \;\approx\; -\,\frac{\mathrm{lr}}{\sqrt\Phi+\epsilon}\,\hat m_t
+  \;=:\;-\,\mathrm{lr}_{\mathrm{eff}}\,\hat m_t,
+\end{equation*}
+a momentum-SGD step with fixed scalar step size $\mathrm{lr}_{\mathrm{eff}}$. All learning signal
+enters \emph{only} through $\hat m_t$ (a $\tfrac{1-\beta_1}{1+\beta_1}$-variance-reduced prefix
+average of the noisy gradients); $\hat v_t$ contributes only the constant $\mathrm{lr}_{\mathrm{eff}}$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+\par\smallskip\noindent\textbf{Notation and standing facts.}\quad 
+Fix one coordinate (all quantities are scalars; the per-coordinate DP noise is independent across
+coordinates, so the argument is coordinatewise without loss of generality). Write $g_t=\bar g_t+\xi_t$
+with $\xi_t\sim\mathcal N(0,\Phi)$ i.i.d.\ and independent of $\{\bar g_s\}_s$. By the definition of
+$\Phi$ in \texttt{dp\_adaptive.py} (the \texttt{phi} property, $\Phi=(\sigma_{\mathrm{DP}}\,C/B_{\mathrm{eff}})^2$),
+this is exactly the per-coordinate variance baked into \texttt{p.grad} after Opacus'
+\texttt{clip\_and\_accumulate}$\to$\texttt{add\_noise}$\to$\texttt{scale\_grad}. Unrolling the
+$m$-EMA with $m_0=0$ gives the explicit linear (FIR / weighted prefix-sum) representation
+\begin{equation}\label{eq:mt-unroll}
+  m_t=(1-\beta_1)\sum_{k=0}^{t-1}\beta_1^{\,k}\,g_{t-k},
+  \qquad\text{hence}\qquad
+  \hat m_t=\frac{m_t}{1-\beta_1^{\,t}}
+  =\frac{(1-\beta_1)}{1-\beta_1^{\,t}}\sum_{k=0}^{t-1}\beta_1^{\,k}\,g_{t-k}.
+\end{equation}
+This is verified by induction on $t$. Base case: $m_1=\beta_1 m_0+(1-\beta_1)g_1=(1-\beta_1)g_1$,
+which is \eqref{eq:mt-unroll} at $t=1$. Inductive step: if \eqref{eq:mt-unroll} holds at $t-1$, then
+\[
+  m_t=\beta_1 m_{t-1}+(1-\beta_1)g_t
+  =(1-\beta_1)\Big[g_t+\sum_{k=1}^{t-1}\beta_1^{k}\,g_{t-k}\Big]
+  =(1-\beta_1)\sum_{k=0}^{t-1}\beta_1^{k}\,g_{t-k},
+\]
+where the second equality re-indexed $\beta_1\!\cdot\!\beta_1^{k-1}g_{(t-1)-(k-1)}=\beta_1^{k}g_{t-k}$.
+This is the claim at $t$. The normalizing constant uses the finite geometric sum
+\begin{equation}\label{eq:geo}
+  (1-\beta_1)\sum_{k=0}^{t-1}\beta_1^{\,k}=1-\beta_1^{\,t}
+  \qquad(\text{valid for all }\beta_1\in[0,1)\text{, including }\beta_1=0\text{ with }0^0:=1),
+\end{equation}
+so the EMA weights $w_k^{(t)}:=\dfrac{(1-\beta_1)\beta_1^{\,k}}{1-\beta_1^{\,t}}$ ($k=0,\dots,t-1$) are
+nonnegative and sum to $1$: $\hat m_t=\sum_{k=0}^{t-1}w_k^{(t)}g_{t-k}$ is a genuine weighted average.
+(I verified \eqref{eq:mt-unroll} against the literal recursion \texttt{m.mul\_(b1).add\_(g,alpha=1-b1)};
+\texttt{mhat=m/(1-b1**t)} of \texttt{\_adam\_update} numerically for $\beta_1\in\{0,0.5,0.9\}$.)
+
+\medskip
+\par\smallskip\noindent\textbf{(i) Unbiasedness.}\quad 
+Linearity of expectation applied to $\hat m_t=\sum_k w_k^{(t)}g_{t-k}$, together with
+$\mathbb E[g_{t-k}]=\mathbb E[\bar g_{t-k}]+\mathbb E[\xi_{t-k}]=\mathbb E[\bar g_{t-k}]$ (the DP noise
+is zero-mean and independent of the signal), gives
+\begin{equation}\label{eq:mhat-mean}
+  \mathbb E[\hat m_t]
+  =\sum_{k=0}^{t-1}w_k^{(t)}\,\mathbb E[\bar g_{t-k}]
+  =\frac{(1-\beta_1)\sum_{k=0}^{t-1}\beta_1^{\,k}\,\mathbb E[\bar g_{t-k}]}{1-\beta_1^{\,t}},
+\end{equation}
+which is the displayed estimator mean. Under the local-stationarity assumption (A2),
+$\mathbb E[\bar g_{t-k}]=\mu$ for all $k$ in the window, so $\mathbb E[\hat m_t]=\mu\sum_k w_k^{(t)}=\mu$
+by $\sum_k w_k^{(t)}=1$; thus $\hat m_t$ is unbiased for the true (clipped, batch-mean) gradient
+$\mu=\mathbb E[\bar g_t]$. For $\beta_1=0$ the sum has the single term $k=0$ with $w_0^{(t)}=1$ (using
+\eqref{eq:geo}), giving $\hat m_t=g_t$ and $\mathbb E[\hat m_t]=\mathbb E[\bar g_t]$ for every $t$ with
+no stationarity assumption needed. (The bias-correction divisor $1-\beta_1^{\,t}$ is exactly what
+removes the cold-start under-counting; without it $\mathbb E[m_t]=(1-\beta_1^{\,t})\mu\to\mu$ only
+asymptotically.)
+
+In the floor regime (A1) the ``signal'' $\mu=\mathbb E[\bar g_t]$ is itself small: by Jensen,
+$\mu^2=(\mathbb E[\bar g_t])^2\le \mathbb E[\bar g_t^2]$, and under (A1)/(A2) (stationary $\mathbb
+E[\bar g_t^2]$) one has $\mathbb E[\bar g_t^2]=\hat v_t^{\mathrm{true}}\ll\Phi$; hence $\mu^2\ll\Phi$.
+Part~(i) asserts only that $\hat m_t$ tracks this small true gradient \emph{without distortion}: the
+first moment is the unbiased estimator and all systematic content of the step originates in $\mu$.
+
+\medskip
+\par\smallskip\noindent\textbf{(ii) Steady-state variance of $\hat m_t$.}\quad 
+We isolate the DP-noise contribution to $\operatorname{Var}(\hat m_t)$ --- the quantity the theorem
+concerns. Since $\xi$ is independent of the signal $\{\bar g_s\}$ and i.i.d.\ across $t$, the law of
+total variance / bilinearity of covariance gives the exact decomposition
+\begin{equation}\label{eq:vardecomp}
+  \operatorname{Var}(\hat m_t)
+  =\operatorname{Var}\!\Big(\sum_{k}w_k^{(t)}\bar g_{t-k}\Big)
+   +\underbrace{\sum_{k=0}^{t-1}\big(w_k^{(t)}\big)^2\,\Phi}_{=:\,\operatorname{Var}_{\xi}(\hat m_t)} ,
+\end{equation}
+where the cross term $\operatorname{Cov}(\sum_k w_k^{(t)}\bar g_{t-k},\,\sum_k w_k^{(t)}\xi_{t-k})=0$
+by signal--noise independence, and the noise term used $\operatorname{Cov}(\xi_{t-k},\xi_{t-j})
+=\Phi\,\delta_{kj}$. The first (signal) term is $O(\hat v_t^{\mathrm{true}})\ll\Phi$ under (A1); I
+confirmed \eqref{eq:vardecomp} and this ordering by Monte Carlo with a random signal trajectory of
+variance $\sim v_{\mathrm{true}}$, obtaining signal/noise ${\approx}10^{-3}$, matching the empirical
+$v_{\mathrm{true}}/\Phi\le1.4\times10^{-3}$ of \texttt{findings.md}. We therefore evaluate the DP-noise
+variance:
+\begin{equation}\label{eq:var-finite}
+  \operatorname{Var}_{\xi}(\hat m_t)
+  =\frac{(1-\beta_1)^2}{(1-\beta_1^{\,t})^2}\,
+   \Big(\sum_{k=0}^{t-1}\beta_1^{\,2k}\Big)\,\Phi
+  =\frac{(1-\beta_1)^2}{(1-\beta_1^{\,t})^2}\cdot
+   \frac{1-\beta_1^{\,2t}}{1-\beta_1^{2}}\,\Phi ,
+\end{equation}
+using $\sum_{k=0}^{t-1}\beta_1^{2k}=(1-\beta_1^{2t})/(1-\beta_1^{2})$ for $\beta_1\in(0,1)$ (for
+$\beta_1=0$ the sum is $1$, handled at the end of this paragraph). Factoring
+$1-\beta_1^{2t}=(1-\beta_1^{t})(1+\beta_1^{t})$ and $1-\beta_1^{2}=(1-\beta_1)(1+\beta_1)$ simplifies
+\eqref{eq:var-finite} to
+\begin{equation}\label{eq:var-finite-clean}
+  \operatorname{Var}_{\xi}(\hat m_t)
+  =\frac{(1-\beta_1)^2}{(1-\beta_1^{\,t})^2}\cdot
+   \frac{(1-\beta_1^{t})(1+\beta_1^{t})}{(1-\beta_1)(1+\beta_1)}\,\Phi
+  =\frac{1-\beta_1}{1+\beta_1}\cdot\frac{1+\beta_1^{\,t}}{1-\beta_1^{\,t}}\,\Phi .
+\end{equation}
+This is the exact finite-$t$ value. \emph{(This corrects the schematic placeholder
+``$\tfrac{1+\beta_1^{t+?}}{\,\cdot\,}$'' appearing in the supplied statement: the exact prefactor is
+$\tfrac{1+\beta_1^{t}}{1-\beta_1^{t}}$.)} I verified \eqref{eq:var-finite-clean} against the direct
+weight-sum $\sum_k (w_k^{(t)})^2\Phi$ for $\beta_1\in\{0,0.5,0.9,0.99\}$, $t\in\{1,2,5,20,200\}$:
+exact agreement. Taking $t\to\infty$ with $\beta_1\in(0,1)$, $\beta_1^{t}\to0$, so
+\begin{equation}\label{eq:var-limit}
+  \lim_{t\to\infty}\operatorname{Var}_{\xi}(\hat m_t)
+  =\frac{1-\beta_1}{1+\beta_1}\,\Phi,
+\end{equation}
+the boxed steady-state variance. (For $\beta_1=0$, \eqref{eq:var-finite} gives
+$\operatorname{Var}_\xi(\hat m_t)=\Phi$ for all $t$ --- consistent with the limit
+$\tfrac{1-0}{1+0}\Phi=\Phi$ and with $\hat m_t=g_t$: no averaging.)
+
+\emph{Strict reduction.} For $\beta_1\in(0,1)$, $\tfrac{1-\beta_1}{1+\beta_1}<1$ (numerator strictly
+below denominator since $-\beta_1<\beta_1$), so the steady-state noise variance
+$\tfrac{1-\beta_1}{1+\beta_1}\Phi<\Phi$ strictly. At the standard Adam value $\beta_1=0.9$ the
+reduction factor is $0.1/1.9\approx0.0526$: the first moment carries ${\approx}5.3\%$ of the per-step
+noise variance --- a ${\approx}19\times$ variance reduction, equivalently an effective averaging
+window of $\tfrac{1+\beta_1}{1-\beta_1}=19$ steps. (Verified numerically: $0.05263$.)
+
+\emph{Monotonicity (direction corrected).} Define $\phi(t):=\tfrac{1+\beta_1^{t}}{1-\beta_1^{t}}$.
+With $u:=\beta_1^{t}\in(0,1)$ \emph{decreasing} in $t$, $\phi=\tfrac{1+u}{1-u}$ has
+$\tfrac{d\phi}{du}=\tfrac{(1-u)+(1+u)}{(1-u)^2}=\tfrac{2}{(1-u)^2}>0$, so $\phi$ is increasing in $u$
+and hence \emph{decreasing} in $t$. Thus $\operatorname{Var}_\xi(\hat m_t)$ \emph{decreases}
+monotonically from its $t=1$ value
+$\tfrac{1-\beta_1}{1+\beta_1}\cdot\tfrac{1+\beta_1}{1-\beta_1}\Phi=\Phi$ down to the limit
+\eqref{eq:var-limit}. \emph{(This corrects the supplied statement's ``increases monotonically'': at
+$t=1$ there is no averaging yet, $\hat m_1=g_1$, variance $\Phi$; averaging accrues --- lowering the
+variance --- only as the window fills.)} Hence
+$\operatorname{Var}_\xi(\hat m_t)\in\big[\tfrac{1-\beta_1}{1+\beta_1}\Phi,\ \Phi\big]$, equal to $\Phi$
+only at $t=1$, and strictly below $\Phi$ for every $t\ge2$. (Verified: the sequence is strictly
+decreasing for $\beta_1\in\{0.5,0.9\}$.)
+
+\emph{Remark (steady-state autocovariance, for completeness).} The stationary process
+$\hat m_\infty^{(t)}=(1-\beta_1)\sum_{k\ge0}\beta_1^k\xi_{t-k}$ (the $t\to\infty$ AR(1) EMA of the
+noise) has lag-$\ell$ autocovariance
+$\operatorname{Cov}(\hat m_\infty^{(t)},\hat m_\infty^{(t-\ell)})
+=(1-\beta_1)^2\sum_{k\ge0}\beta_1^{k}\beta_1^{k+\ell}\,\Phi
+=\tfrac{(1-\beta_1)^2\beta_1^{\ell}}{1-\beta_1^2}\Phi
+=\tfrac{1-\beta_1}{1+\beta_1}\beta_1^{\ell}\Phi$; at $\ell=0$ this recovers \eqref{eq:var-limit}. (I
+simulated the AR(1)-EMA of white noise and recovered both the boxed marginal variance and the
+lag-$\ell$ law.) Thus the first moment is a low-pass-filtered (AR(1)) version of the white DP noise,
+whose marginal variance is exactly the boxed quantity --- a clean instance of the
+$\tfrac{1-\beta}{1+\beta}$ EMA variance-reduction identity.
+
+\medskip
+\par\smallskip\noindent\textbf{(iii) Adaptivity off ($\hat v_t\approx\Phi$, constant).}\quad 
+By the second-moment inflation identity (Lemma~\ref{lem:inflation} of \texttt{theory.tex}): conditioning
+on $\bar g_t$, $\mathbb E[g_t^2\mid\bar g_t]=\bar g_t^2+2\bar g_t\mathbb E[\xi_t]+\mathbb E[\xi_t^2]
+=\bar g_t^2+\Phi$ (cross term $0$ since $\mathbb E[\xi_t\mid\bar g_t]=0$); propagating through the
+$v$-EMA and dividing by $1-\beta_2^{t}$ (whereby the factor $(1-\beta_2)\sum_{k}\beta_2^k=1-\beta_2^t$
+multiplying the constant $\Phi$ cancels), one obtains
+\begin{equation}\label{eq:vhat-mean}
+  \mathbb E[\hat v_t]=\hat v_t^{\mathrm{true}}+\Phi .
+\end{equation}
+Under (A1), $\hat v_t^{\mathrm{true}}\ll\Phi$, so $\mathbb E[\hat v_t]=(1+\hat v_t^{\mathrm{true}}/\Phi)\Phi
+=(1+o(1))\Phi\approx\Phi$. The coordinate-to-coordinate and step-to-step variation of $\hat v_t$ is
+governed entirely by $\hat v_t^{\mathrm{true}}$ (the only $x$-dependent term), which is
+$O(\hat v^{\mathrm{true}})=o(\Phi)$; the dominant term $\Phi$ is a \emph{global constant} (it depends
+only on $\sigma_{\mathrm{DP}},C,B_{\mathrm{eff}}$, identical across coordinates). Hence $\hat v_t$
+carries no per-coordinate signal and $\sqrt{\hat v_t}+\epsilon\approx\sqrt\Phi+\epsilon$ uniformly.
+This is precisely the empirical observation that $\rho=\Phi/\hat v$ saturates at $1.00$--$1.07$ across
+$\varepsilon\in\{1,3,8\}$ and $B\in[16,2048]$ (\texttt{findings.md}: ``$v_{\mathrm{true}}\ll\Phi$
+everywhere''; measured $\hat v-\Phi=-3\times10^{-11}$, i.e.\ $v_{\mathrm{true}}/\Phi\le1.4\times10^{-3}$).
+
+\medskip
+\par\smallskip\noindent\textbf{(iv) Collapse to momentum-SGD; signal lives in $\hat m_t$.}\quad 
+The optimizer's update line is, verbatim, \texttt{p.addcdiv\_(mhat, vhat.sqrt().add\_(eps),
+value=-lr)}, i.e.\ $\Delta_t=-\,\mathrm{lr}\,\hat m_t/(\sqrt{\hat v_t}+\epsilon)$. We make the
+substitution of the constant denominator from (iii) quantitative. Set $a:=\hat v_t^{\mathrm{true}}\ge0$
+and $b:=\Phi>0$, so $\hat v_t=a+b$ (in mean; the fluctuation argument is identical coordinatewise). By
+the mean-value form,
+\[
+  \Big|\tfrac{1}{\sqrt{a+b}+\epsilon}-\tfrac{1}{\sqrt{b}+\epsilon}\Big|
+  =\frac{\sqrt{a+b}-\sqrt b}{(\sqrt{a+b}+\epsilon)(\sqrt b+\epsilon)}
+  \le\frac{a/(2\sqrt b)}{(\sqrt b+\epsilon)^2}
+  =\frac{1}{2(\sqrt\Phi+\epsilon)^2}\cdot\frac{\hat v^{\mathrm{true}}}{\sqrt\Phi},
+\]
+using $\sqrt{a+b}-\sqrt b=a/(\sqrt{a+b}+\sqrt b)\le a/(2\sqrt b)$ and $\sqrt{a+b}+\epsilon\ge\sqrt
+b+\epsilon$. Multiplying by $(\sqrt\Phi+\epsilon)$ shows the \emph{relative} deviation of the
+preconditioner from the constant $1/(\sqrt\Phi+\epsilon)$ is at most
+$\tfrac12\,\hat v^{\mathrm{true}}/\Phi=\tfrac12 r$, where $r:=\hat v^{\mathrm{true}}/\Phi
+=\rho^{-1}-1=(1-\rho)/\rho\to0$ as $\rho\to1^-$. (Both the mean-value inequality and the relative bound
+$\le r/2$ were verified by $10^5$ random draws; no violations.) Therefore
+\begin{equation}\label{eq:collapse}
+  \Delta_t=-\,\mathrm{lr}\,\frac{\hat m_t}{\sqrt{\hat v_t}+\epsilon}
+  =-\,\frac{\mathrm{lr}}{\sqrt\Phi+\epsilon}\big(1+O(r)\big)\,\hat m_t
+  =-\,\mathrm{lr}_{\mathrm{eff}}\,\hat m_t\big(1+O(r)\big),
+  \qquad \mathrm{lr}_{\mathrm{eff}}:=\frac{\mathrm{lr}}{\sqrt\Phi+\epsilon},
+\end{equation}
+with $\mathrm{lr}_{\mathrm{eff}}$ a \emph{fixed scalar} and relative error $\le r/2\ll1$. Hence the
+DP-Adam update is, to leading order, a momentum-SGD step $\Delta_t=-\mathrm{lr}_{\mathrm{eff}}\hat m_t$
+with a fixed scalar step size; adaptivity is switched off, the geometric per-coordinate rescaling
+$1/\sqrt{\hat v_t}$ having degenerated to the global constant $1/\sqrt\Phi$.
+
+Finally, all learning signal enters \emph{only} through $\hat m_t$: by (i)--(ii), $\hat m_t$ is the
+unbiased, $\tfrac{1-\beta_1}{1+\beta_1}$-variance-reduced prefix average of the noisy gradients (a
+low-pass of the white DP noise that drifts toward the small true gradient $\mu$ over
+${\approx}\tfrac{1+\beta_1}{1-\beta_1}$ steps), while $\hat v_t\approx\Phi$ contributes only the
+constant scale $\mathrm{lr}_{\mathrm{eff}}$ and no directional information. This proves (iv): at
+$\rho\approx1$ the update tracks a momentum-SGD step whose signal comes entirely from the first moment
+$\hat m_t$.
+
+\medskip
+\par\smallskip\noindent\textbf{Consequences (consistency with the empirical record).}\quad 
+(a) Because the only surviving role of $\hat v_t$ is to set the scalar $\mathrm{lr}_{\mathrm{eff}}$,
+DP-AdamBC's $\Phi$-subtraction ($\hat v^{\mathrm{BC}}=\max(\hat v-\Phi,\xi)$) and the floor-only
+control ($\max(\hat v,\xi)$, no $\Phi$ term) both reduce to $\Delta_t=-(\mathrm{lr}/\sqrt\xi)\hat m_t$
+once the clamp binds (which it does at $\rho\approx1$, where $\hat v-\Phi\approx0<\xi$): they differ
+only in the scalar $1/\sqrt\xi$, i.e.\ an effective learning rate. This is exactly the observed
+collapse (\texttt{findings.md} cycle~7: all DP-AdamBC floors fully clamped, $\hat v\equiv\xi$ constant,
+BLEU monotone in $\xi$; \texttt{dp-adambc}$(10^{-6})\!\approx\!$\texttt{dp-adam-xi}$(10^{-6})$). (b)
+Since the signal is confined to $\hat m_t$, methods that reshape $\hat v_t$ (BC) or the per-step
+\emph{direction} (Muon orthogonalization, $+8\times10^{-5}$ cosine) cannot recover below-floor signal;
+only the first-moment path (momentum/prefix-sum, or reducing $\Phi$ via batch/$\varepsilon$) is a live
+lever --- the premise that motivated DP-CorrMom.
+
+\medskip
+\par\smallskip\noindent\textbf{Appendix: the privacy sensitivity $\kappa$ of the DP-CorrMom injection (independently
+re-derived).}\quad  For completeness, and because part~(iv)(b) invokes the first-moment lever realized by
+DP-CorrMom, we re-derive the matrix-mechanism sensitivity used in \texttt{corr\_sensitivity}. The
+injection $n_t=z_t-\lambda z_{t-1}$ over a horizon of $T$ steps is $n=Lz$ with $L\in\mathbb R^{T\times
+T}$ lower-bidiagonal, $L_{tt}=1$, $L_{t,t-1}=-\lambda$. The released object is the gradient
+prefix-sum (workload $A=$ lower-triangular all-ones); the error accumulated in the prefix-sum is
+$A n=A L z$, and the matrix mechanism factors $A=BC$ with strategy $C=L^{-1}$ (so that $A L=B$ acts on
+the \emph{decorrelated} white $z$, leaving the released error proportional to $Bz$ with $z$ i.i.d.).
+The per-step privacy cost (the $\ell_2$ sensitivity of one record's contribution under the strategy)
+is the maximum column $\ell_2$-norm of $C=L^{-1}$. Now $L^{-1}$ is the lower-triangular Toeplitz matrix
+with first column $(1,\lambda,\lambda^2,\dots,\lambda^{T-1})^\top$ (directly: $L^{-1}=\sum_{j\ge0}
+(\lambda N)^j$ where $N$ is the unit sub-diagonal shift, $N^T=0$, giving entries $(L^{-1})_{ij}
+=\lambda^{\,i-j}\mathbf 1\{i\ge j\}$). Column $t$ ($0$-indexed) has squared norm
+$\sum_{k=0}^{T-1-t}\lambda^{2k}$, maximized at $t=0$:
+\[
+  \kappa=\max_t\|L^{-1}e_t\|_2
+  =\Big(\sum_{k=0}^{T-1}\lambda^{2k}\Big)^{1/2}
+  =\sqrt{\frac{1-\lambda^{2T}}{1-\lambda^{2}}}\,,
+\]
+which is exactly \texttt{corr\_sensitivity(lam,T)} and \emph{not} $\sqrt{1+\lambda^{2}}$ (the latter is
+$\|L e_0\|_2$, the column norm of $L$ itself --- the column norm of the \emph{wrong} matrix, which
+under-noises and breaks privacy). A Mahalanobis cross-check confirms this: with $\hat g\sim\mathcal
+N(g,\nu^2 LL^\top)$, a unit change in coordinate $t$ incurs $\Delta=(G^2/\nu^2)(LL^\top)^{-1}_{tt}$ and
+$(LL^\top)^{-1}_{tt}=\|L^{-1}e_t\|_2^2$, recovering the same $\kappa$. I verified by explicit numerical
+inversion of $L$ for $\lambda\in\{0,0.5,0.9,0.95\}$, $T\in\{5,50,500\}$ that $\max_t\|L^{-1}e_t\|_2$
+equals $\sqrt{(1-\lambda^{2T})/(1-\lambda^2)}$ exactly (e.g.\ $\lambda=0.9$: $\kappa\to2.294$, vs.\ the
+wrong $\sqrt{1+\lambda^2}=1.345$), and that $(LL^\top)^{-1}_{tt}=\|L^{-1}e_t\|_2^2$. Thus the
+$\kappa$ used throughout is correct. \hfill$\qed$
+\end{proof}
