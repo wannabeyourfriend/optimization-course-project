@@ -8,6 +8,7 @@
 \usepackage{booktabs}
 \usepackage[margin=1in]{geometry}
 \usepackage{graphicx}
+\graphicspath{{figures/}}
 \usepackage{enumitem}
 \usepackage{xcolor}
 \usepackage{microtype}
@@ -392,6 +393,16 @@ $2$-seed while its DP-AdamBC floors are single-seed (marked $\dagger$), and the 
 every claim's strength to its evidence.
 
 \subsection{R1: The noise share saturates at \texorpdfstring{$\rho\approx 1$}{rho approx 1} across every reachable configuration}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.86\linewidth]{gate_dynamics.png}
+\caption{\textbf{The noise share saturates.} On RoBERTa-large/MNLI (DP-LoRA, $B{=}64$,
+$\varepsilon{=}3$), the measured median second moment $\hat v$ sits right on the DP-noise variance
+$\Phi$ (left), so the logged noise share $\rho=\Phi/\hat v$ rides its ceiling $1$ (right) rather than
+the bias-correction sweet spot $\tfrac12$---i.e.\ $v_{\mathrm{true}}\!\approx\!0$, the signal is below
+the noise floor.}
+\label{fig:gate}
+\end{figure}
 \label{sec:r1}
 
 \paragraph{Motivation.}
@@ -451,6 +462,16 @@ per-coordinate preconditioning by $\hat v$. This is the load-bearing mechanism f
 follows: \emph{the only live lever is the first-moment / prefix-sum path; the second moment is inert.}
 
 \subsection{R3: At \texorpdfstring{$\rho\approx 1$}{rho approx 1}, bias correction collapses to momentum-SGD---a step-size knob, confirmed by four controls}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.62\linewidth]{floor_dichotomy.png}
+\caption{\textbf{The floor dichotomy.} Qwen2.5-1.5B/E2E ($\varepsilon{=}3$): with $\rho\!\approx\!1$
+every DP-AdamBC variant is fully clamped, so it is momentum-SGD with step scale $1/\sqrt{\xi}$ and its
+utility \emph{tracks the floor} rather than improving on DP-Adam (dashed). At a binding floor,
+$\Phi$-subtraction is inert: DP-AdamBC coincides with the floor-only control. Bias correction never
+exceeds the DP-Adam band.}
+\label{fig:floor}
+\end{figure}
 \label{sec:r3}
 
 \paragraph{Motivation.}
@@ -516,6 +537,15 @@ variance floor of Theorem~\ref{thm:floor}, which BC does not touch. \textbf{Bias
 a geometry distortion that, at $\rho\approx1$, has nothing left to distort.}
 
 \subsection{R4: Beyond \texorpdfstring{$\rho\approx 1$}{rho approx 1}, the only ``win'' is an effective learning rate---an inverted-U the control flattens}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.6\linewidth]{convergence_transient.png}
+\caption{\textbf{Bias correction speeds convergence but not the converged solution.} Qwen2.5-1.5B/E2E,
+$B{=}4096$, $\varepsilon{=}8$ ($\rho{=}0.955$, 3 seeds): DP-AdamBC leads at step~40 (under-trained), yet
+DP-Adam catches up and passes it by step~80. The effect is an effective step-size increase, which a
+learning-rate sweep on DP-Adam reproduces and matches---not a better optimum.}
+\label{fig:conv}
+\end{figure}
 \label{sec:r4}
 
 \paragraph{Motivation.}
@@ -611,6 +641,16 @@ fundamental to the noise level, not an artifact of any one preconditioner. The o
 is the first-moment path itself---which sets up the positive-method attempt.
 
 \subsection{R6 (headline negative): even correct anti-correlated noise on the first moment does not beat a tuned, amplified DP-Adam}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.74\linewidth]{corrmom_lambda.png}
+\caption{\textbf{Correlated noise ($\lambda{>}0$) never helps.} Qwen2.5-1.5B/E2E, $\varepsilon{=}8$,
+$B{=}256$, 1 seed (proxy BLEU at step~120). Across Adam-momentum, $\beta_1{=}0$, and the matched
+plain-SGD workload (\texttt{dp-corrsgd}), increasing the anti-correlation $\lambda$ flattens or
+\emph{decreases} utility, and all unamplified variants sit below an amplified DP-Adam (dashed). This
+is the signal ceiling: at $\rho\!\approx\!1$ the model is signal-limited, not variance-limited.}
+\label{fig:corrmom}
+\end{figure}
 \label{sec:r6}
 
 \paragraph{Motivation.}
