@@ -1,4 +1,4 @@
-# Optimization Methods for AI — Course Project
+# Optimization Methods for AI Course Project
 
 ### An Optimization View of DP LLM Fine-tuning: *When Does Bias Correction Help, and Can the Optimizer Be Improved?*
 
