@@ -1,5 +1,7 @@
 # Optimization Methods for AI Course Project
 
+<img width="1672" height="941" alt="42c9a90a-5a77-4868-84c1-1c836fa97144" src="https://github.com/user-attachments/assets/a54f5e49-0ad9-4c36-8f44-eeed8f25fa2a" />
+
 ### An Optimization View of DP LLM Fine-tuning: *When Does Bias Correction Help, and Can the Optimizer Be Improved?*
 
 This project studies, from an optimization viewpoint, the reference method **DP-AdamBC**
