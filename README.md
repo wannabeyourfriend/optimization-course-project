@@ -52,11 +52,16 @@ The correlated optimizers use **single-participation, unamplified** accounting: 
 
 **Step 1 — correctness/privacy unit tests (fast, CPU, no download):**
 ```bash
-PYTHONPATH=src python tests/test_dp_adaptive.py   # σ=0 ≡ Adam; the Φ formula
-PYTHONPATH=src python tests/test_dp_corrmom.py     # κ == maxcol(L⁻¹) (≠ √(1+λ²));
-                                                   # λ=0 ≡ i.i.d. noise bit-for-bit; w_t = z_t − λ z_{t-1}
-PYTHONPATH=src python src/train.py --dry-run --task e2e --optimizer dp-corrmom \
-  --epsilon 8 --lambda-corr 0.8                    # fully offline; prints the certified ε
+PYTHONPATH=src python tests/test_dp_adaptive.py
+
+PYTHONPATH=src python tests/test_dp_corrmom.py
+
+PYTHONPATH=src python src/train.py 
+   --dry-run \ 
+   --task e2e \ 
+   --optimizer dp-corrmom \
+   --epsilon 8 \
+   --lambda-corr 0.8
 ```
 
 **Step 2 — experiments (GPU; each script → one result in the report):**
@@ -72,9 +77,18 @@ PYTHONPATH=src python src/train.py --dry-run --task e2e --optimizer dp-corrmom \
 Example single run:
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python src/train.py \
-  --model qwen2.5-1.5b --task e2e --lora --lora-r 16 \
-  --optimizer dp-adambc --epsilon 3 --batch-size 512 --micro-batch 16 \
-  --lr 1e-3 --max-grad-norm 0.1 --steps 150 --eval-every 50 --seed 0 --out results/
+  --model qwen2.5-1.5b \
+  --task e2e --lora --lora-r 16 \
+  --optimizer dp-adambc \
+  --epsilon 3 \
+  --batch-size 512 \
+  --micro-batch 16 \
+  --lr 1e-3 \
+  --max-grad-norm 0.1 \
+  --steps 150 \
+  --eval-every 50 \
+  --seed 0 \
+  --out results/
 ```
 
 ## Repository layout
@@ -88,11 +102,20 @@ scripts/        plotting + dashboard
 report/         the course report (course-report.tex + proofs + course-report.pdf)
 ```
 
-## Reference
+## Main Reference of this project
 
-DP-AdamBC — Q. Tang, J. Niu et al., *Differentially Private Bias-Term Fine-tuning... / DP-AdamBC*,
-AAAI 2024, [arXiv:2312.14334](https://arxiv.org/abs/2312.14334). Built on
-[Opacus](https://github.com/pytorch/opacus). Models: RoBERTa-large/MNLI and Qwen2.5-1.5B/E2E-NLG.
+@misc{tang2023dpadambcdpadamactuallydpsgd,
+      title={DP-AdamBC: Your DP-Adam Is Actually DP-SGD (Unless You Apply Bias Correction)}, 
+      author={Qiaoyue Tang and Frederick Shpilevskiy and Mathias Lécuyer},
+      year={2023},
+      eprint={2312.14334},
+      archivePrefix={arXiv},
+      primaryClass={cs.LG},
+      url={https://arxiv.org/abs/2312.14334}, 
+}
 
-*Note: E2E utility is a teacher-forced argmax proxy BLEU; the positive-method sweeps are single-seed
-(stated in the report's limitations).*
+Models: RoBERTa-large/MNLI and Qwen2.5-1.5B/E2E-NLG.
+
+## Citation
+
+
