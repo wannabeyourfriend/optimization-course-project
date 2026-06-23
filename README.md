@@ -1,15 +1,9 @@
-# Optimization Methods for AI Course Project
+# An optimization view of differentially private LLM fine-tuning.
+
+> When does DP-AdamBC help, and can a better optimizer beat well-tuned DP-Adam?
 
 <div align="center">
-
 <img width="100%" alt="Project overview figure" src="https://github.com/user-attachments/assets/a54f5e49-0ad9-4c36-8f44-eeed8f25fa2a" />
-
-<br />
-
-**An optimization view of differentially private LLM fine-tuning.**
-</div>
-
-*When does DP-AdamBC help, and can a better optimizer beat well-tuned DP-Adam?*
 
 ## Overview
 
