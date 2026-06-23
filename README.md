@@ -7,11 +7,9 @@
 <br />
 
 **An optimization view of differentially private LLM fine-tuning.**
-*When does DP-AdamBC help, and can a better optimizer beat well-tuned DP-Adam?*
-
 </div>
 
----
+*When does DP-AdamBC help, and can a better optimizer beat well-tuned DP-Adam?*
 
 ## Overview
 
@@ -110,10 +108,10 @@ Dry-run privacy / correctness check:
 
 ```bash
 PYTHONPATH=src python src/train.py \
-  --dry-run \
-  --task e2e \
-  --optimizer dp-corrmom \
-  --epsilon 8 \
+  --dry-run               \
+  --task e2e              \
+  --optimizer dp-corrmom  \
+  --epsilon 8             \
   --lambda-corr 0.8
 ```
 
@@ -136,19 +134,19 @@ Example single run:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=src python src/train.py \
-  --model qwen2.5-1.5b \
-  --task e2e \
-  --lora \
-  --lora-r 16 \
+  --model qwen2.5-1.5b  \
+  --task e2e            \
+  --lora                \
+  --lora-r 16           \ 
   --optimizer dp-adambc \
-  --epsilon 3 \
-  --batch-size 512 \
-  --micro-batch 16 \
-  --lr 1e-3 \
-  --max-grad-norm 0.1 \
-  --steps 150 \
-  --eval-every 50 \
-  --seed 0 \
+  --epsilon 3           \
+  --batch-size 512      \
+  --micro-batch 16      \
+  --lr 1e-3             \ 
+  --max-grad-norm 0.1   \
+  --steps 150           \
+  --eval-every 50       \
+  --seed 0              \
   --out results/
 ```
 
