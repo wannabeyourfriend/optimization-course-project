@@ -11,13 +11,12 @@
 
 </div>
 
----
-
 ## Overview
 
 This repository studies **differentially private LLM fine-tuning** through the lens of optimization.
 
 The starting point is **DP-AdamBC**: a bias-corrected variant of DP-Adam that subtracts the analytic DP-noise variance
+
 
 [
 \Phi = (\sigma C / B)^2
@@ -32,20 +31,6 @@ The full derivations, experimental controls, and results are available in:
 
 > [`report/course-report.pdf`](report/course-report.pdf)
 
----
-
-## Key Findings
-
-| Finding                                               | Takeaway                                                                                                                                             |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Diagnostic ratio** (\rho = \Phi / \hat v \in [0,1]) | Bias correction is useful mainly when (\rho \approx 1/2).                                                                                            |
-| **DP-LoRA saturation**                                | In the standard DP-LoRA recipe, (\rho) often saturates near (1), making (\hat v) an almost inert noise floor.                                        |
-| **Momentum-path dominance**                           | At (\rho \approx 1), learning mostly follows the first moment (\hat m), i.e. a noisy gradient prefix-sum.                                            |
-| **DP-AdamBC collapse**                                | When (\rho \approx 1), DP-AdamBC effectively collapses toward momentum-SGD. When (\rho < 1), it mostly acts as an effective learning-rate knob.      |
-| **DP-CorrMom / DP-CorrSGD**                           | Correlated noise on the first-moment path reduces prefix-sum variance, but does not beat a tuned, privacy-amplified DP-Adam baseline in this regime. |
-| **Unified negative result**                           | The limiting factor is not variance but signal: once (\rho \approx 1), the model is signal-limited, so further noise-shaping is insufficient.        |
-
----
 
 ## Method Summary
 
@@ -68,8 +53,6 @@ with corrected privacy sensitivity
 
 This connects the optimizer behavior to DP-FTRL / matrix-factorization mechanisms for private prefix sums.
 
----
-
 ## Installation
 
 ```bash
@@ -81,8 +64,6 @@ export PYTHONPATH=src
 ```
 
 The project uses `opacus==1.6.0` for DP training and accounting.
-
----
 
 ## Optimizer Variants
 
@@ -105,8 +86,6 @@ Relevant implementation:
 ```text
 src/dp_optim/dp_adaptive.py
 ```
-
----
 
 ## Reproduction
 
