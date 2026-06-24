@@ -19,10 +19,6 @@ from Adam's second-moment estimate $\hat v$. The project asks two questions:
 1. **When does second-moment bias correction actually help in DP fine-tuning?**
 2. **Can a principled correlated-noise optimizer outperform a well-tuned, privacy-amplified DP-Adam baseline?**
 
-The full derivations, experimental controls, and results are available in:
-
-> [`report/course-report.pdf`](report/course-report.pdf)
-
 ---
 
 ## Method Summary
@@ -76,7 +72,7 @@ Use the `--optimizer` flag to choose an optimizer.
 | `dp-corrmom` | Adam-style update with correlated noise | Correlated noise on the momentum path               |
 | `dp-corrsgd` | SGD-style update with correlated noise  | Correlated noise on the matched prefix-sum workload |
 
-The correlated optimizers use **single-participation, unamplified accounting**. The dataloader requires `steps × batch_size` distinct examples and raises an error otherwise, preventing silent privacy violations. The noise scale is inflated by `corr_sensitivity(lambda_corr, steps)`.
+The correlated optimizers use **single-participation, unamplified accounting**. The dataloader requires `steps × batch_size` distinct examples and raises an error otherwise, preventing silent privacy violations.
 
 Relevant implementation:
 
@@ -110,7 +106,7 @@ PYTHONPATH=src python src/train.py \
 
 ### Step 2: Experiments
 
-Each script corresponds to one result discussed in the report.
+Each script corresponds to one result discussed in the project.
 
 | Script                                | Result                                                               |
 | ------------------------------------- | -------------------------------------------------------------------- |
@@ -159,29 +155,7 @@ The experiments focus on two DP fine-tuning settings:
 ## Repository Layout
 
 ```text
-src/
-  dp_optim/
-    DPAdaptive
-    DPCorrelatedOptimizer
-    DPCorrelatedAdaptive
-    make_dp_optimizer
-    corr_sensitivity
 
-  train.py
-    Single training entry point for DP-LoRA, Opacus, PRV accounting,
-    and single-participation correlated-noise experiments.
-
-tests/
-  Privacy and optimizer correctness tests.
-
-experiments/
-  One bash script per report result.
-
-scripts/
-  Plotting and dashboard utilities.
-
-report/
-  Course report, proofs, figures, and compiled PDF.
 ```
 
 ---
@@ -206,7 +180,7 @@ This project is motivated by DP-AdamBC:
 
 ## Citation
 
-If you use this repository or build on the report, please cite:
+If you use this repository or build on the project, please cite:
 
 ```bibtex
 @misc{wang2026optimizationviewdpllm,
@@ -233,11 +207,9 @@ Please also cite the directly relevant prior work:
 
 @article{yousefpour2021opacus,
   title   = {Opacus: User-Friendly Differential Privacy Library in PyTorch},
-  author  = {Yousefpour, Ashkan and Shilov, Igor and Sablayrolles, Alexandre and Testuggine, Davide and Prasad, Karthik and Malek, Mani and Nguyen, John and Ghosh, Sayan and Bharadwaj, Akash and Zhao, Jessica and Cormode, Graham and Mironov, Ilya},
+  author  = {Yousefpour, Ashkan and Shilov, Igor and Sablayrolles, Alexandre and Testuggine, Davide and Prasad, Karthik and Malek, Mani and Nguyen, John and Ghosh, Sayan and Bharadwaj, Akash},
   journal = {arXiv preprint arXiv:2109.12298},
   year    = {2021},
   url     = {https://arxiv.org/abs/2109.12298}
-}
-ology.org/W17-5525/}
 }
 ```
