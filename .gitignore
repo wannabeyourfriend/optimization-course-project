@@ -216,3 +216,20 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# LaTeX compilation outputs
+*.pdf
+*.aux
+*.log
+*.out
+*.toc
+*.dvi
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+*.latexmain
+*.bbl
+*.blg
+
+# Report directory - keep only PDF, TeX sources managed by submodule
+report/src/
