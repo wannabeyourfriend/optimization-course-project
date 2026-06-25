@@ -152,14 +152,6 @@ The experiments focus on two DP fine-tuning settings:
 
 ---
 
-## Repository Layout
-
-```text
-
-```
-
----
-
 ## Main Reference
 
 This project is motivated by DP-AdamBC:
